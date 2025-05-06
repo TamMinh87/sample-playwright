@@ -1,4 +1,4 @@
-# S5Tech Web Automation
+# Sample Web Automation
 Based on Microsoft Playwright which enables reliable end-to-end testing for modern web apps
 
 ## Features
