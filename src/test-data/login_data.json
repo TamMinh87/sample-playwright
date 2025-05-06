@@ -1,0 +1,21 @@
+{
+    "single": {
+        "username":"testdata@gmail.com",
+        "password":"password123"
+    },
+    "multiple": 
+    [
+        {
+            "username":"standard_user",
+            "password":"secret_sauce"
+        },
+        {
+            "username":"problem_user",
+            "password":"secret_sauce"
+        },
+        {
+            "username":"error_user",
+            "password":"secret_sauce"
+        }
+    ]
+}
