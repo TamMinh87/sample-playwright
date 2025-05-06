@@ -55,6 +55,13 @@ jobs:
         echo "Free space:"
         df -h
 
+    - name: Free up space
+      run: |
+        sudo rm -rf /usr/share/dotnet
+        sudo rm -rf /opt/ghc
+        sudo rm -rf "/usr/local/share/boost"
+        sudo rm -rf "$AGENT_TOOLSDIRECTORY"
+
     - name: Set Timezone
       uses: zcong1993/setup-timezone@v2.0.0
       with:
