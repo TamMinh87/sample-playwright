@@ -1,0 +1,323 @@
+name: Test CI/CD - template
+on:
+  workflow_call:
+    inputs:
+      env:
+        required: true
+        type: string
+      application:
+        required: true
+        type: string
+      description:
+        required: true
+        type: string
+    # secrets:
+    #   SLACK_WEBHOOK:
+    #     required: true
+
+permissions:
+  contents: write
+  pages: write
+  id-token: write
+
+concurrency:
+  group: "pages"
+  cancel-in-progress: false
+  
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    outputs:
+      total: ${{ steps.summary.outputs.total }}
+      passed: ${{ steps.summary.outputs.passed }}
+      failed: ${{ steps.summary.outputs.failed }}
+      skipped: ${{ steps.summary.outputs.skipped }}
+      flaky: ${{ steps.summary.outputs.flaky }}
+      end_time: ${{ steps.summary.outputs.end_time }}
+      test_status: ${{ steps.status.outputs.test_status }}
+      page_url: ${{ steps.deployment-data.outputs.page_url }}
+    env:
+      ENV: ${{ inputs.env }}
+
+    steps:
+    - name: Maximize build space
+      uses: easimon/maximize-build-space@master
+      with:
+        root-reserve-mb: 512
+        swap-size-mb: 1024
+        remove-dotnet: 'true'
+
+    - name: Checkout branch
+      uses: actions/checkout@v4
+
+    - name: Build
+      run: |
+        echo "Free space:"
+        df -h
+
+    - name: Set Timezone
+      uses: zcong1993/setup-timezone@v2.0.0
+      with:
+        timezone: Asia/Bangkok
+
+    - name: Setup Node
+      uses: actions/setup-node@v4
+      with:
+        node-version: 20
+
+    - name: Cache Playwright binaries
+      uses: actions/cache@v4
+      id: playwright-cache
+      with:
+        path: |
+          ~/.cache/ms-playwright
+        key: ${{ runner.os }}-playwright-${{ hashFiles('**/package-lock.json') }}
+
+    - name: Install dependencies
+      run: npm ci
+
+    - name: Install Playwright browsers (if cache miss)
+      if: steps.playwright-cache.outputs.cache-hit != 'true'
+      run: npx playwright install --with-deps
+
+    - name: Install Playwright system dependencies (if cache hit)
+      if: steps.playwright-cache.outputs.cache-hit == 'true'
+      run: npx playwright install-deps
+
+    - name: Run tests
+      id: test
+      run: npm run ${{ inputs.application }}:test
+        
+    - name: Get test status
+      if: always()
+      id: status
+      run: echo "test_status=${{ steps.test.outcome }}" >> $GITHUB_OUTPUT
+
+    - name: Read Summary Report to Get Test Results
+      if: always()
+      id: summary
+      run: |
+        passed=$(jq '.stats.expected' ./test-results/report.json)
+        echo "passed=$passed" >> $GITHUB_OUTPUT
+        failed=$(jq '.stats.unexpected' ./test-results/report.json)
+        echo "failed=$failed" >> $GITHUB_OUTPUT
+        skipped=$(jq '.stats.skipped' ./test-results/report.json)
+        echo "skipped=$skipped" >> $GITHUB_OUTPUT
+        flaky=$(jq '.stats.flaky' ./test-results/report.json)
+        echo "flaky=$flaky" >> $GITHUB_OUTPUT
+        echo "total=$(($passed + $failed + $skipped + $flaky))" >> $GITHUB_OUTPUT
+        echo "end_time=$(date '+%d-%B-%Y %H:%M')" >> $GITHUB_OUTPUT
+
+    - name: Load test report history
+      uses: actions/checkout@v4
+      if: always()
+      continue-on-error: true
+      with:
+        ref: report-history/common
+        path: report-history
+
+    - name: Build test report
+      uses: simple-elf/allure-report-action@master
+      if: always()
+      with:
+        gh_pages: report-history/${{ inputs.application }}-${{ inputs.env }}
+        allure_history: allure-history
+        allure_results: test-results
+        keep_reports: 0
+
+    - name: Publish test report
+      uses: peaceiris/actions-gh-pages@v4
+      if: always()
+      with:
+        github_token: ${{ secrets.GITHUB_TOKEN }}
+        publish_branch: report-history/common
+        publish_dir: allure-history
+        destination_dir: ${{ inputs.application }}-${{ inputs.env }}
+        
+  deploy:
+    needs: test
+    if: always()
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    runs-on: ubuntu-latest
+    outputs:
+      page_url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          ref: 'report-history/common'
+
+      - name: Setup Pages
+        uses: actions/configure-pages@v4
+
+      - name: Upload artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: '.'
+
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4
+
+      - name: Get url
+        id: deployment-data
+        run: echo "page_url=${{ steps.deployment.outputs.page_url }}" >> "$GITHUB_OUTPUT"
+
+  # slack:
+  #   needs: [test, deploy]
+  #   if: always()
+  #   runs-on: ubuntu-latest
+  #   env:
+  #     ENV: ${{ inputs.env }}
+  #   steps:
+  #     - name: Wait for deployed report
+  #       run: sleep 30s
+  #       shell: bash
+
+  #     - name: Notify Slack on Success
+  #       if: ${{needs.test.outputs.test_status == 'success'}}
+  #       uses: fjogeleit/http-request-action@v1
+  #       with:
+  #         url: ${{ secrets.SLACK_WEBHOOK }}
+  #         method: 'POST'
+  #         customHeaders: '{"Content-Type": "application/json"}'
+  #         data: '{
+  #           "attachments": [
+  #             {
+  #               "color": "#36a64f",
+  #               "blocks": [
+  #                 {
+  #                   "type": "header",
+  #                   "text": {
+  #                     "type": "plain_text",
+  #                     "text": "${{inputs.description}}",
+  #                     "emoji": true
+  #                   }
+  #                 },
+  #                 {
+  #                   "type": "section",
+  #                   "fields": [
+  #                     {
+  #                       "type": "mrkdwn",
+  #                       "text": "*Environment:*\n${{env.ENV}}"
+  #                     },
+  #                     {
+  #                       "type": "mrkdwn",
+  #                       "text": "*Date:*\n${{needs.test.outputs.end_time}}"
+  #                     }
+  #                   ]
+  #                 },
+  #                 {
+  #                   "type": "section",
+  #                   "text": {
+  #                     "type": "mrkdwn",
+  #                     "text": "*Total tests:* ${{needs.test.outputs.total}}\n*Passed:* ${{needs.test.outputs.passed}}\n*Failed:* ${{needs.test.outputs.failed}}\n*Skipped:* ${{needs.test.outputs.skipped}}"
+  #                   }
+  #                 },
+  #                 {
+  #                   "type": "actions",
+  #                   "elements": [
+  #                     {
+  #                       "type": "button",
+  #                       "text": {
+  #                         "type": "plain_text",
+  #                         "text": "View Report",
+  #                         "emoji": true
+  #                       },
+  #                       "value": "View Report",
+  #                       "style": "primary",
+  #                       "action_id": "actionId-0",
+  #                       "url": "${{ needs.deploy.outputs.page_url }}${{ inputs.application }}-${{ inputs.env }}/${{ github.run_number }}"
+  #                     },
+  #                     {
+  #                       "type": "button",
+  #                       "text": {
+  #                         "type": "plain_text",
+  #                         "text": "Test Run",
+  #                         "emoji": true
+  #                       },
+  #                       "value": "Test Run",
+  #                       "action_id": "actionId-1",
+  #                       "url": "${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+  #                     }
+  #                   ]
+  #                 }
+  #               ]
+  #             }
+  #           ]
+  #         }'
+
+  #     - name: Notify Slack on Failure
+  #       if: ${{needs.test.outputs.test_status == 'failure'}}
+  #       uses: fjogeleit/http-request-action@v1
+  #       with:
+  #         url: ${{ secrets.SLACK_WEBHOOK }}
+  #         method: 'POST'
+  #         customHeaders: '{"Content-Type": "application/json"}'
+  #         data: '{
+  #           "attachments": [
+  #               {
+  #                   "color": "#ff0000",
+  #                   "blocks": [
+  #                       {
+  #                           "type": "header",
+  #                           "text": {
+  #                               "type": "plain_text",
+  #                               "text": "${{inputs.description}}",
+  #                               "emoji": true
+  #                           }
+  #                       },
+  #                       {
+  #                           "type": "section",
+  #                           "fields": [
+  #                               {
+  #                                   "type": "mrkdwn",
+  #                                   "text": "*Environment:*\n${{env.ENV}}"
+  #                               },
+  #                               {
+  #                                   "type": "mrkdwn",
+  #                                   "text": "*Date:*\n${{needs.test.outputs.end_time}}"
+  #                               }
+  #                           ]
+  #                       },
+  #                       {
+  #                           "type": "section",
+  #                           "text": {
+  #                               "type": "mrkdwn",
+  #                               "text": "*Total tests:* ${{needs.test.outputs.total}}\n*Passed:* ${{needs.test.outputs.passed}}\n*Failed:* ${{needs.test.outputs.failed}}\n*Skipped:* ${{needs.test.outputs.skipped}}"
+  #                           }
+  #                       },
+  #                       {
+  #                           "type": "actions",
+  #                           "elements": [
+  #                               {
+  #                                   "type": "button",
+  #                                   "text": {
+  #                                       "type": "plain_text",
+  #                                       "text": "View Report",
+  #                                       "emoji": true
+  #                                   },
+  #                                   "value": "View Report",
+  #                                   "style": "primary",
+  #                                   "action_id": "actionId-0",
+  #                                   "url": "${{ needs.deploy.outputs.page_url }}${{ inputs.application }}-${{ inputs.env }}/${{ github.run_number }}"
+  #                               },
+  #                               {
+  #                                   "type": "button",
+  #                                   "text": {
+  #                                       "type": "plain_text",
+  #                                       "text": "Test Run",
+  #                                       "emoji": true
+  #                                   },
+  #                                   "value": "Test Run",
+  #                                   "action_id": "actionId-1",
+  #                                   "url": "${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+  #                               }
+  #                           ]
+  #                       }
+  #                   ]
+  #               }
+  #           ]
+  #         }'
