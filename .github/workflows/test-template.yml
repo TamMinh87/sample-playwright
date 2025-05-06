@@ -141,36 +141,36 @@ jobs:
         publish_dir: allure-history
         destination_dir: ${{ inputs.application }}-${{ inputs.env }}
         
-  deploy:
-    needs: test
-    if: always()
-    environment:
-      name: github-pages
-      url: ${{ steps.deployment.outputs.page_url }}
-    runs-on: ubuntu-latest
-    outputs:
-      page_url: ${{ steps.deployment.outputs.page_url }}
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-        with:
-          ref: 'report-history/common'
+  # deploy:
+  #   needs: test
+  #   if: always()
+  #   environment:
+  #     name: github-pages
+  #     url: ${{ steps.deployment.outputs.page_url }}
+  #   runs-on: ubuntu-latest
+  #   outputs:
+  #     page_url: ${{ steps.deployment.outputs.page_url }}
+  #   steps:
+  #     - name: Checkout
+  #       uses: actions/checkout@v4
+  #       with:
+  #         ref: 'report-history/common'
 
-      - name: Setup Pages
-        uses: actions/configure-pages@v4
+  #     - name: Setup Pages
+  #       uses: actions/configure-pages@v4
 
-      - name: Upload artifact
-        uses: actions/upload-pages-artifact@v3
-        with:
-          path: '.'
+  #     - name: Upload artifact
+  #       uses: actions/upload-pages-artifact@v3
+  #       with:
+  #         path: '.'
 
-      - name: Deploy to GitHub Pages
-        id: deployment
-        uses: actions/deploy-pages@v4
+  #     - name: Deploy to GitHub Pages
+  #       id: deployment
+  #       uses: actions/deploy-pages@v4
 
-      - name: Get url
-        id: deployment-data
-        run: echo "page_url=${{ steps.deployment.outputs.page_url }}" >> "$GITHUB_OUTPUT"
+  #     - name: Get url
+  #       id: deployment-data
+  #       run: echo "page_url=${{ steps.deployment.outputs.page_url }}" >> "$GITHUB_OUTPUT"
 
   # slack:
   #   needs: [test, deploy]
