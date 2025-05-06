@@ -1,0 +1,24 @@
+name: S5Tech Web - staging
+on:
+  schedule:
+    - cron: '0 15 * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  pages: write
+  id-token: write
+
+jobs:
+  call-tests:
+    uses: ./.github/workflows/test-template.yml
+    with:
+      env: staging
+      application: web
+      description: S5Tech Test Report (Web)
+    # secrets:
+    #   SLACK_WEBHOOK: ${{ secrets.SLACK_WEBHOOK }}
+    permissions:
+      contents: write
+      pages: write
+      id-token: write
