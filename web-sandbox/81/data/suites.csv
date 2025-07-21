@@ -1,0 +1,5 @@
+"DESCRIPTION","DURATION IN MS","NAME","PARENT SUITE","START TIME","STATUS","STOP TIME","SUB SUITE","SUITE","TEST CLASS","TEST METHOD"
+"","1958","Search 'Admin' in navigation bar","Google Chrome","Mon Jul 21 15:29:39 GMT 2025","passed","Mon Jul 21 15:29:41 GMT 2025","Search test","search_tests.spec.ts","",""
+"","2290","Login with correct credential","Google Chrome","Mon Jul 21 15:29:37 GMT 2025","passed","Mon Jul 21 15:29:39 GMT 2025","Login test","login_tests.spec.ts","",""
+"","2901","Search 'Admin' in navigation bar","Safari","Mon Jul 21 15:29:50 GMT 2025","passed","Mon Jul 21 15:29:53 GMT 2025","Search test","search_tests.spec.ts","",""
+"","8380","Login with correct credential","Safari","Mon Jul 21 15:29:41 GMT 2025","passed","Mon Jul 21 15:29:50 GMT 2025","Login test","login_tests.spec.ts","",""
